@@ -87,7 +87,7 @@ FUNCTION main( nPuerto )
 #endif
    oPP = __pp_Init( INCLUDE_PATH, "std.ch" )
 
-   oServer = THB_Socket():new( nPuerto )
+   oServer = HB_Socket():new( nPuerto )
 #ifndef __DAEMON__   
    printf(  "Presione <ESC> para salir" + CRLF)
 #endif   
@@ -214,7 +214,7 @@ RETURN lExit
 
 //-----------------------------------------//
 
-CLASS THB_Socket
+CLASS HB_Socket
 
    DATA   cBindAddress INIT "0.0.0.0"
 
@@ -263,7 +263,7 @@ ENDCLASS
 
 //-----------------------------------------//
 
-METHOD New( nPort ) CLASS THB_Socket
+METHOD New( nPort ) CLASS HB_Socket
 
    DEFAULT nPort := 8080
    
@@ -279,7 +279,7 @@ RETURN Self
 
 //-----------------------------------------//
 
-METHOD End() CLASS THB_Socket
+METHOD End() CLASS HB_Socket
 
    LOCAL pClient
    
@@ -295,7 +295,7 @@ RETURN nil
 
 //-----------------------------------------//
 
-METHOD Debug( ... ) CLASS THB_Socket
+METHOD Debug( ... ) CLASS HB_Socket
    
    local aParams := hb_aParams()
 
@@ -312,7 +312,7 @@ METHOD Debug( ... ) CLASS THB_Socket
 RETURN NIL
 //-----------------------------------------//
 
-METHOD Listen() CLASS THB_Socket
+METHOD Listen() CLASS HB_Socket
 
    ::pSocket     = hb_socketOpen( )
    ::hMutexUser  = HB_MutexCreate()   
@@ -356,7 +356,7 @@ RETURN .T.
 
 //-----------------------------------------//
 
-METHOD OnAccept() CLASS THB_Socket
+METHOD OnAccept() CLASS HB_Socket
 
    local pClientSocket
    local oClient
@@ -370,7 +370,7 @@ METHOD OnAccept() CLASS THB_Socket
          ::Debug( "ACCEPTED", pClientSocket )
          hb_mutexLock( ::hMutexUser )
          ::NewId()
-         oClient = THB_SocketClient():New( Self )
+         oClient = HB_SocketClient():New( Self )
          oClient:nID = ::nClientId
          oClient:hSocket = pClientSocket
          hb_HSET( ::hClients, ::nClientId, oClient )
@@ -389,7 +389,7 @@ RETURN nil
 
 //------------------------------------------------------//
 
-METHOD OnClose( oClient ) CLASS THB_Socket
+METHOD OnClose( oClient ) CLASS HB_Socket
    
    ::Debug( "CLIENT CLOSED", oClient:hSocket, oClient:nID )
    
@@ -408,7 +408,7 @@ return nil
 
 //------------------------------------------------------//
 
-METHOD OnRead( oClient ) CLASS THB_Socket
+METHOD OnRead( oClient ) CLASS HB_Socket
 
    local lMyExit    := .F.
    local cData, oError
@@ -456,7 +456,7 @@ RETURN nil
 
 //-----------------------------------------//
 
-METHOD SendData( oClient, cSend ) CLASS THB_Socket
+METHOD SendData( oClient, cSend ) CLASS HB_Socket
 
    local nLen 
 
@@ -476,7 +476,7 @@ RETURN nLen
 
 //-----------------------------------------//
 
-CLASS THB_SocketClient
+CLASS HB_SocketClient
 
    DATA hSocket
    DATA nID
@@ -494,7 +494,7 @@ ENDCLASS
 
 //-----------------------------------------//
 
-METHOD New( oSrv ) CLASS  THB_SocketClient
+METHOD New( oSrv ) CLASS  HB_SocketClient
 
    ::oServer = oSrv
 
