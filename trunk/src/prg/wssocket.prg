@@ -19,13 +19,15 @@
 
 #define PORT_FILE hb_dirBase() + "port.txt"
 static oServer, oPP
-static nPort
+static nPort, lBackground
 
 extern hb_version
 
 PROCEDURE Main( cMode, cPuerto )
    LOCAL nError
    LOCAL cMsg
+   
+   lBackground = .T.
    
    IF ! File( PORT_FILE ) .OR. ! Empty( cPuerto )
       DEFAULT cPuerto TO "2000"   
@@ -50,6 +52,8 @@ PROCEDURE Main( cMode, cPuerto )
         KillTerm( nProcess )
         return nil
      endif
+   elseif Upper( cMode ) == "N"
+      lBackground = .F.
    else
      QOut(  CRLF + "FiveTech daemon. Syntax:" + CRLF )
      QOut(  "   ./daemon start" + CRLF )
@@ -100,9 +104,13 @@ PROCEDURE Main( cMode, cPuerto )
          ? "Error deleting service: " + hb_ntos( nError ) + " " + cMsg
       ENDIf
       EXIT
-
+   
+   CASE "N"
+      /* NOTE: Used run like a app */      
+      lBackground = .F.
+      SrvMain()
+      EXIT
    CASE "S"
-
       /* NOTE: Used when starting up as service.
                Do not invoke the executable manually with this option */
 
@@ -113,7 +121,9 @@ PROCEDURE Main( cMode, cPuerto )
          cMsg := Space( 128 )
          wapi_FormatMessage( ,,,, @cMsg )
          ? "Service has had some problems: " + hb_ntos( nError ) + " " + cMsg
-      ENDIF
+      ENDIF    
+   OTHERWISE
+      ? "Invalid parameter"
       EXIT
 
    ENDSWITCH
@@ -138,10 +148,14 @@ PROCEDURE SrvMain()
    
    oPP = __pp_Init( cInclude, "std.ch" )
    oServer = HB_Socket():new( nPort )
+      if lBackground
 #ifdef  __PLATFORM__WINDOWS
+         oServer:bOnProccess = {|| ! ( win_serviceGetStatus() == WIN_SERVICE_RUNNING ) }
 #endif    
+      else 
+         ? "Press <ESC> to exit!!!"
+      endif
       oServer:lDebug = .T.
-      oServer:bOnProccess = {|| ! ( win_serviceGetStatus() == WIN_SERVICE_RUNNING ) }
       oServer:bDebug = {| aParam | LogFile( "debug.txt", aParam ) }
       oServer:bOnRead = {| oSrv, oClient | OnReadProcess( oClient ) }
       oServer:Listen()
