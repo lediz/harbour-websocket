@@ -1,216 +1,9 @@
-//
-//socket server test
-//
-//hbmk2 -mt -lxhb -ldflag=--allow-multiple-definition hbsocket
-//run: hbsocket [<nPort>]
-//like daemon
-//hbmk2 -mt -lxhb -ldflag=--allow-multiple-definition __DAEMON__ wsserver
-//run: ./hbsocket start [<nPort>]
-//
-
 #include "hbclass.ch"
 #include "hbsocket.ch"
 #include "hbcompat.ch"
 #include "fileio.ch"
 
-#xcommand DEFAULT <uVar1> := <uVal1> ;
-               [, <uVarN> := <uValN> ] => ;
-                  If( <uVar1> == nil, <uVar1> := <uVal1>, ) ;;
-                [ If( <uVarN> == nil, <uVarN> := <uValN>, ); ]
-
 #define CRLF chr(13)+chr(10)
-#define MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-
-#define PID_FILE "pid.pid"
-#define SIGHUP   1
-#define SIGTERM 15
-#define SIGKILL  9
-
-static oServer, oPP
-
-//adjust to own path
-//#define INCLUDE_PATH "/usr/local/include/harbour"
-#define INCLUDE_PATH "c:\harbour\include"
-
-extern hb_version
-
-//-----------------------------------------//
-
-#ifdef __DAEMON__
-FUNCTION main( cMode, nPuerto )
-#else
-FUNCTION main( nPuerto )
-#endif      
-   DEFAULT nPuerto := "2000"
-   
-   nPuerto = Val( nPuerto )
-   
-   //adjust include path
-   
-   cls
-#ifdef __DAEMON__
-   if cMode == "start"
-     if File( PID_FILE )
-        printf(  "daemon is already running" + CRLF )
-        return nil
-     else
-        MemoWrit( PID_FILE, AllTrim( Str( getpid() ) ) )
-     endif
-   elseif cMode == "stop"
-     if File( PID_FILE )
-        nProcess = Val( MemoRead( PID_FILE ) ) + 1
-        hb_tracelog( "finishing daemon", nProcess )
-        KillTerm( nProcess )
-        return nil
-     endif
-   else
-     printf(  CRLF + "FiveTech daemon. Syntax:" + CRLF )
-     printf(  "   ./daemon start" + CRLF )
-     printf(  "   ./daemon stop" + CRLF + CRLF  )
-     return nil
-   endif   
-
-   SetSignalsHandler()
-
-   if Fork() > 0
-     return nil  // Parent process ends and child process continues
-   endif
-
-   umask( 0 ) // In order to write to any files (including logs) created by the daemon
-
-   SetSignalAlarm()
-
-   printf(  "daemon starts" + CRLF )
-
-   // Close standard files descriptors
-   // CloseStandardFiles()
-#endif
-   oPP = __pp_Init( INCLUDE_PATH, "std.ch" )
-
-   oServer = HB_Socket():new( nPuerto )
-#ifndef __DAEMON__   
-   printf(  "Presione <ESC> para salir" + CRLF)
-#endif   
-   oServer:lDebug = .T.
-   oServer:bDebug = {| aParam | LogFile( "debug.txt", aParam ) }
-//   oServer:bOnProccess = {| oServer | Proceso( ) }
-   oServer:bOnRead = {| oSrv, oClient | OnReadProcess( oClient ) }
-   oServer:Listen()
-   oServer:End()
-#ifdef __DAEMON__
-   printf(  CRLF + "daemon ends" + CRLF )
-   nProcess = Val( MemoRead( PID_FILE ) ) + 1
-   FErase( PID_FILE )
-   KillKill( nProcess )
-#endif    
-
-   
-RETURN nil
-
-#ifdef __DAEMON__
-function SignalHandler( nSignal )
-
-  do case 
-     case nSignal == SIGHUP
-          printf(  "Received SIGHUP signal" + CRLF  )
-     case nSignal == SIGKILL .or. nSignal == SIGTERM
-          printf( "to exit..." + CRLF )
-          oServer:lExit = .T. 
-     otherwise
-          printf(  "Unhandled SIGNAL " + AllTrim( Str( nSignal ) ) + CRLF )
-  endcase
-
-return nil
-
-#endif
-
-static function OnReadProcess( oClient )
-   
-   local cMask, cData, n, cMsg:="", oError
-   local nMaskPos := 1, cAnswer
-   
-   //handshake
-   if oClient:Cargo == NIL .OR. ( hb_HHasKey( oClient:Cargo, "HANDSHAKE" ) .AND. ! oClient:Cargo[ "HANDSHAKE" ] )
-      HandShake( oClient ) 
-   else 
-      cData = oClient:cBuffer
-      cMask = SubStr( cData, 3, 4 )
-      for n = 1 to Len( SubStr( cData, 7 ) )
-          cMsg += Chr( hb_BitXOR( Asc( SubStr( cMask, nMaskPos++, 1 ) ), Asc( SubStr( cData, 6 + n, 1 ) ) ) )
-          if nMaskPos == 5
-             nMaskPos = 1
-          endif   
-      next 
-   
-      oClient:SendData( chr( 129 ) + chr( len( cMsg ) ) + hb_StrToUTF8( cMsg ) )
-      
-      TRY
-         cMsg = __pp_Process( oPP, cMsg )
-         cAnswer = uValToChar( &cMsg ) 
-      CATCH oError
-         cAnswer = "Error: " + oError:Description
-      END      
-
-      oClient:SendData( Chr( 129 ) + Chr( Len( cAnswer ) ) + hb_StrToUtf8( cAnswer ) )
-   endif
-
-return nil
-
-//-----------------------------------------//
-
-static function HandShake(  oClient )
-   local nLen, cBuffer, cContext, cKey, cSend
-   
-   cBuffer := oClient:cBuffer
-
-   cContext = GetContext( cBuffer, "Sec-WebSocket-Key" )
-   cKey     = hb_Base64Encode( hb_sha1( cContext + MAGIC_KEY, .T. ) ) // + "." add something to check that the handshake gets wrong
-   
-   cSend = "HTTP/1.1 101 Switching Protocols" + CRLF + ;
-           "Upgrade: websocket" + CRLF + ;
-           "Connection: Upgrade" + CRLF + ;
-           "Sec-WebSocket-Accept: " + cKey + CRLF + CRLF   
-
-   nLen = oClient:SendData( cSend )
-
-   IF nLen > 0
-      oClient:Cargo = hb_Hash()
-      oClient:cargo[ "HANDSHAKE" ] = .T.    
-      
-   ENDIF
-
-   
-return nil 
-
-//-----------------------------------------//
-
-static function GetContext( cData, cContext )
-
-  local nLen := Len( cContext )
-  local cValue := ""
-  local aLines
-  local aSubLine
-  local cRow
-  
-  aLines := hb_ATokens( cData, CRLF )
-  for each cRow in aLines
-     if cContext $ cRow
-        aSubLine = hb_ATokens( cRow, ":" )
-        cValue = AllTrim( aSubLine[ 2 ] )
-        exit
-     endif
-  next
-
-return cValue
-
-//-----------------------------------------//
-
-FUNCTION Proceso(  )
-   local lExit
-   
-   lExit := ( LastKey() == 27 )
-   
-RETURN lExit
 
 //-----------------------------------------//
 
@@ -265,7 +58,7 @@ ENDCLASS
 
 METHOD New( nPort ) CLASS HB_Socket
 
-   DEFAULT nPort := 8080
+   DEFAULT nPort TO 8080
    
    ::nClientId = 1
    ::nPort     = nPort
@@ -304,7 +97,7 @@ METHOD Debug( ... ) CLASS HB_Socket
       IF hb_IsBlock( ::bDebug )
          Eval( ::bDebug, aParams )
       ELSE
-         AEval( aParams, {| u | printf( u ) } )
+         AEval( aParams, {| u | QOut( u ) } )
       ENDIF
       
    ENDIF
@@ -318,13 +111,13 @@ METHOD Listen() CLASS HB_Socket
    ::hMutexUser  = HB_MutexCreate()   
 
    IF ! hb_socketBind( ::pSocket, { HB_SOCKET_AF_INET, ::cBindAddress, ::nPort } )
-      PRINTF( ::cError :=  "Bind error " + hb_ntos( hb_socketGetError() ) )
+      QOut( ::cError :=  "Bind error " + hb_ntos( hb_socketGetError() ) )
       hb_socketClose( ::pSocket )
       RETURN .F.
    ENDIF
 
    IF ! hb_socketListen( ::pSocket )
-      PRINTF( ::cError :=  "Listen error " + hb_ntos( hb_socketGetError() ) )
+      QOut( ::cError :=  "Listen error " + hb_ntos( hb_socketGetError() ) )
       hb_socketClose( ::pSocket )
       RETURN .F.
    ENDIF
@@ -334,7 +127,7 @@ METHOD Listen() CLASS HB_Socket
    endif
    ::Debug( "LISTEN" )
 
-   hb_ThreadStart( @OnAccept(), Self )
+   hb_ThreadStart( {|| ::OnAccept() } )
 
    DO WHILE ! ::lExit
    
@@ -364,7 +157,6 @@ METHOD OnAccept() CLASS HB_Socket
    ::Debug( "ONACCEPT" )
       
    do while ! ::lExit
-//      inkey( 0.1 )
 
       if ! Empty( pClientSocket := hb_socketAccept( ::pSocket,, 500 ) )
          ::Debug( "ACCEPTED", pClientSocket )
@@ -375,7 +167,7 @@ METHOD OnAccept() CLASS HB_Socket
          oClient:hSocket = pClientSocket
          hb_HSET( ::hClients, ::nClientId, oClient )
          hb_mutexUnlock( ::hMutexUser )
-         hb_ThreadStart( @OnRead(), Self, oClient )
+         hb_ThreadStart( {| oClient | ::OnRead( oClient ) }, oClient )
          if ::bOnAccept != NIL
             Eval( ::bOnAccept, Self, oClient )
          endif
@@ -418,7 +210,7 @@ METHOD OnRead( oClient ) CLASS HB_Socket
    local cBuffer
    
    do while ! lMyExit 
-//      inkey( 0.05 )
+
       cBuffer = Space( 4096 )   
       TRY
          if ( nLength := hb_socketRecv( oClient:hSocket, @cBuffer,4096, 0, 1000 ) ) > 0
@@ -473,9 +265,7 @@ METHOD SendData( oClient, cSend ) CLASS HB_Socket
 RETURN nLen   
 
 //-----------------------------------------//
-
 //-----------------------------------------//
-
 CLASS HB_SocketClient
 
    DATA hSocket
@@ -502,23 +292,12 @@ RETURN Self
 
 //-----------------------------------------//
 
-static FUNCTION OnAccept( oSrv )
-   oSrv:OnAccept()
-RETURN nil
-
-//-----------------------------------------//
-
-static FUNCTION OnRead( oSrv, oClient )
-   oSrv:OnRead( oClient )
-RETURN nil
-//-----------------------------------------//
-
-//---------------------------------------------------------------------------//
-
 static function LogFile( cFileName, aInfo )
 
    local hFile, cLine := DToC( Date() ) + " " + Time() + ": ", n
-
+   
+   cFileName = hb_dirBase() + cFileName
+   
    for n = 1 to Len( aInfo )
       cLine += uValToChar( aInfo[ n ] ) + Chr( 9 )
    next
@@ -571,7 +350,7 @@ static function uValToChar( uVal )
            return "{|| ... }"
 
       case cType == "A"
-           return hb_dumpvar( uVal )
+           return "{...}"
 
       case cType == "O"
            return If( __ObjHasData( uVal, "cClassName" ), uVal:cClassName, uVal:ClassName() )
@@ -595,139 +374,7 @@ return nil
 
 //---------------------------------------------------------------------------//
 
-function TStr( n )
+static function TStr( n )
 return AllTrim( Str( n ) )
 
 //---------------------------------------------------------------------------//
-
-function QOut( c )
-
-   c = uValToChar( c )
-
-   oServer:SendData( Chr( 129 ) + Chr( Len( c ) ) + hb_StrToUtf8( c ) )
-   
-return nil   
-
-
-//---------------------------------------------------------------------------//
-
-#ifdef __DAEMON__
-
-#pragma BEGINDUMP
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <unistd.h>
-#include <syslog.h>
-#include <string.h>
-#include <signal.h>
-
-#include <hbapi.h>
-#include <hbvm.h>
-
-HB_FUNC( FORK )
-{
- hb_retnl( fork() );
-}
-
-HB_FUNC( UMASK )
-{
-  umask( hb_parnl( 1 ) );
-}
-
-HB_FUNC( EXIT )
-{
-  exit( EXIT_SUCCESS );
-}
-
-HB_FUNC( GETPPID )
-{
-  hb_retnl( getppid() );
-}
-
-HB_FUNC( GETPID )
-{
-  hb_retnl( getpid() );
-}
-
-HB_FUNC( KILLTERM )
-{
-  kill( hb_parnl( 1 ), SIGTERM );
-}
-
-HB_FUNC( KILLKILL )
-{
-  kill( hb_parnl( 1 ), SIGKILL );
-}
-
-HB_FUNC( CLOSESTANDARDFILES )
-{
-  close( STDIN_FILENO );
-  close( STDOUT_FILENO );
-  close( STDERR_FILENO );
-}
-
-void CatchAlarm( int sig )
-{
- HB_SYMBOL_UNUSED( sig );
-}
-
-void SignalHandler( int sig )
-{
-  hb_vmPushSymbol( hb_dynsymGetSymbol( "SIGNALHANDLER" ) );
-  hb_vmPushNil();
-  hb_vmPushLong( sig );
-  hb_vmFunction( 1 );
-}
-
-HB_FUNC( SETSIGNALALARM )
-{
- signal( SIGALRM, CatchAlarm );
-}
-
-HB_FUNC( SETSIGNALSHANDLER )
-{
-  signal( SIGHUP, SignalHandler );
-  signal( SIGTERM, SignalHandler );
-  signal( SIGINT, SignalHandler );
-  signal( SIGQUIT, SignalHandler );
-  signal( SIGKILL, SignalHandler );
-}
-
-HB_FUNC( ALARM )
-{
- alarm( hb_parnl( 1 ) );
-}
-
-HB_FUNC( SLEEP )
-{
- sleep( hb_parnl( 1 ) );
-}
-
-HB_FUNC( SYSLOG )
-{
-  syslog( hb_parnl( 1 ), hb_parc( 2 ), hb_parc( 3 ) );
-}
-
-HB_FUNC( TEST )
-{
-  hb_retnl( LOG_WARNING );
-}
-
-#pragma ENDDUMP
-
-#endif 
-#pragma BEGINDUMP
-#include <hbapi.h>
-
-HB_FUNC( PRINTF )
-{
- printf( hb_parc( 1 ) );
-}
-
-
-#pragma ENDDUMP
