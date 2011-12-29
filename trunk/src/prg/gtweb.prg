@@ -329,21 +329,8 @@ static void hb_gt_web_SetPos( PHB_GT pGT, int iCol, int iRow )
    /* TODO: set cursor position and shape */
 }
 
-static hb_gt_web_getClient( void )
-{
-   hb_vmPushSymbol( hb_dynsymGetSymbol( "_OCLIENT" ) );
-   hb_vmPush( s_pGtServer ); 
-   hb_vmPush( s_pGtClient ); 
-   hb_vmSend( 1 );
-
-}
-
 static void hb_gt_web_sendData( const char * szText, HB_SIZE nLength  )
 {
-   //PHB_ITEM pClient;
-
-   //hb_gt_web_getClient();
-   
       
    hb_vmPushSymbol( hb_dynsymGetSymbol( "HBSENDDATA" ) );
    hb_vmPush( s_pGtServer ); 
@@ -355,13 +342,14 @@ static void hb_gt_web_sendData( const char * szText, HB_SIZE nLength  )
 
 static void hb_gt_web_WriteCon( PHB_GT pGT, const char * szText, HB_SIZE nLength )
 {
-   HB_SYMBOL_UNUSED( pGT );
    HB_SIZE nLen;
    char * szRet;
    PHB_ITEM pJSon    = hb_hashNew( hb_itemNew( NULL ) );
    PHB_ITEM pKey     = NULL,
             pValue   = NULL;
    PHB_ITEM pJSonPar = hb_hashNew( hb_itemNew( NULL ) );
+
+   HB_SYMBOL_UNUSED( pGT );
    
    pKey   = hb_itemPutC( pKey, "function" );
    pValue = hb_itemPutC( pValue, "drawText" );

@@ -394,7 +394,6 @@ void * pfnCallBack_OnRead;
 void set_callback_Onread( void * p )
 {
 	void * pfnCallBack_OnRead = p;   
-
 }
 
 HB_FUNC( SET_CALLBACK_ONREAD )
