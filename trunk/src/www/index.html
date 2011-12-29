@@ -6,24 +6,46 @@ var ctx; // context
 var row, col; // say coordinates
 var socket;
 
+function drawText( parameter )
+{
+      
+      var context = ctx;
+   
+      if( context ) 
+      {
+      	 ctx.fillStyle = '#0f0';
+         ctx.font      = '20px verdana';
+         context.fillText( parameter.text, parameter.row, parameter.col );
+      }
+   
+}
+
 function connect()
 {
    try
    {
       socket = new WebSocket( "ws://localhost:2000/harbour" );
-      Say( "Connecting to the Harbour WebSockets server..." );
 
       socket.onopen = function( event )
       {
-         Say( "Connected" );
+//         Say( "Connected" );
       }
       socket.onmessage = function( msg )
       {
-         Say( msg.data );
+      	var JSON = eval ("(" + msg.data + ")");
+      	try
+      	{
+      	   eval( JSON.function )( JSON.parameter );
+      	}catch( oError )
+      	{
+      	   send( "Error on Message" );
+      	}
+      	
       }
+      
       socket.onclose = function( event )
       {
-         Say( "connection closed from the server" );
+         //Say( "connection closed from the server" );
       }
       socket.onerror = function()
       {
@@ -40,7 +62,6 @@ function Send( text )
    try
    {
       socket.send( text );
-      Say( "sending request to the server..." );
    }
    catch( exception )
    {
@@ -80,10 +101,6 @@ function init()
    ctx.textBaseline = 'top';
    row = 0;
    col = 0;
-      
-   Say( "Initializing..." );
-   Say( new Date() );
-   Say( "ready" );
 
    connect();
    
@@ -115,8 +132,6 @@ window.onload = init;
 <canvas id="canvas" width="800" height="570" style="background-color:#000"></canvas>
 </div>
 <br>
-<b>Command:</b> <input id="command" type="text" name="command" style="width:750px; 
-                 background-color:#000; color:#0f0; font-size: 20px;"
-                 onkeypress="ProcessCommand( event )">
 </body>
 </html>
+
