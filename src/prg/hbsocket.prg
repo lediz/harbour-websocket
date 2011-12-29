@@ -1,13 +1,14 @@
 #include "hbclass.ch"
 #include "hbsocket.ch"
-#include "hbcompat.ch"
 #include "fileio.ch"
+#include "common.ch"
+
 
 #define CRLF chr(13)+chr(10)
 
 //-----------------------------------------//
 
-CLASS HB_Socket
+CLASS HBSocket
 
    DATA   cBindAddress INIT "0.0.0.0"
 
@@ -33,6 +34,7 @@ CLASS HB_Socket
    DATA lExit        
 
    DATA pSocket
+   DATA oPP
 
    METHOD New()
    METHOD End()
@@ -56,7 +58,7 @@ ENDCLASS
 
 //-----------------------------------------//
 
-METHOD New( nPort ) CLASS HB_Socket
+METHOD New( nPort, oPP ) CLASS HBSocket
 
    DEFAULT nPort TO 8080
    
@@ -67,12 +69,14 @@ METHOD New( nPort ) CLASS HB_Socket
    ::lExit     = .F.
    ::lDebug    = .F. 
    
+   ::oPP       = oPP
+   
 
 RETURN Self
 
 //-----------------------------------------//
 
-METHOD End() CLASS HB_Socket
+METHOD End() CLASS HBSocket
 
    LOCAL pClient
    
@@ -81,14 +85,14 @@ METHOD End() CLASS HB_Socket
    next
    
    if ::pSocket != NIL
-      //hb_socketClose( ::pSocket )
+      //HBSocketClose( ::pSocket )
    endif
 
 RETURN nil
 
 //-----------------------------------------//
 
-METHOD Debug( ... ) CLASS HB_Socket
+METHOD Debug( ... ) CLASS HBSocket
    
    local aParams := hb_aParams()
 
@@ -105,20 +109,20 @@ METHOD Debug( ... ) CLASS HB_Socket
 RETURN NIL
 //-----------------------------------------//
 
-METHOD Listen() CLASS HB_Socket
+METHOD Listen() CLASS HBSocket
 
-   ::pSocket     = hb_socketOpen( )
+   ::pSocket     = HB_SocketOpen( )
    ::hMutexUser  = HB_MutexCreate()   
 
-   IF ! hb_socketBind( ::pSocket, { HB_SOCKET_AF_INET, ::cBindAddress, ::nPort } )
-      QOut( ::cError :=  "Bind error " + hb_ntos( hb_socketGetError() ) )
-      hb_socketClose( ::pSocket )
+   IF ! HB_SocketBind( ::pSocket, { HB_SOCKET_AF_INET, ::cBindAddress, ::nPort } )
+      QOut( ::cError :=  "Bind error " + hb_ntos( HB_SocketGetError() ) )
+      HB_SocketClose( ::pSocket )
       RETURN .F.
    ENDIF
 
-   IF ! hb_socketListen( ::pSocket )
-      QOut( ::cError :=  "Listen error " + hb_ntos( hb_socketGetError() ) )
-      hb_socketClose( ::pSocket )
+   IF ! HB_SocketListen( ::pSocket )
+      QOut( ::cError :=  "Listen error " + hb_ntos( HB_SocketGetError() ) )
+      HB_SocketClose( ::pSocket )
       RETURN .F.
    ENDIF
       
@@ -149,7 +153,7 @@ RETURN .T.
 
 //-----------------------------------------//
 
-METHOD OnAccept() CLASS HB_Socket
+METHOD OnAccept() CLASS HBSocket
 
    local pClientSocket
    local oClient
@@ -158,21 +162,22 @@ METHOD OnAccept() CLASS HB_Socket
       
    do while ! ::lExit
 
-      if ! Empty( pClientSocket := hb_socketAccept( ::pSocket,, 500 ) )
+      if ! Empty( pClientSocket := HB_SocketAccept( ::pSocket,, 500 ) )
          ::Debug( "ACCEPTED", pClientSocket )
          hb_mutexLock( ::hMutexUser )
          ::NewId()
-         oClient = HB_SocketClient():New( Self )
+         oClient = HBSocketClient():New( Self )
          oClient:nID = ::nClientId
          oClient:hSocket = pClientSocket
          hb_HSET( ::hClients, ::nClientId, oClient )
          hb_mutexUnlock( ::hMutexUser )
-         hb_ThreadStart( {| oClient | ::OnRead( oClient ) }, oClient )
          if ::bOnAccept != NIL
             Eval( ::bOnAccept, Self, oClient )
-         endif
+         endif         
+         hb_ThreadStart( {| oClient | ::OnRead( oClient ) }, oClient )
+
       elseif ! ::lExit
-         //? "Catched error ",  hb_ntos( hb_socketGetError() )
+         //? "Catched error ",  hb_ntos( HBSocketGetError() )
          //EXIT
       endif
    enddo
@@ -181,7 +186,7 @@ RETURN nil
 
 //------------------------------------------------------//
 
-METHOD OnClose( oClient ) CLASS HB_Socket
+METHOD OnClose( oClient ) CLASS HBSocket
    
    ::Debug( "CLIENT CLOSED", oClient:hSocket, oClient:nID )
    
@@ -200,7 +205,7 @@ return nil
 
 //------------------------------------------------------//
 
-METHOD OnRead( oClient ) CLASS HB_Socket
+METHOD OnRead( oClient ) CLASS HBSocket
 
    local lMyExit    := .F.
    local cData, oError
@@ -212,14 +217,14 @@ METHOD OnRead( oClient ) CLASS HB_Socket
    do while ! lMyExit 
 
       cBuffer = Space( 4096 )   
-      TRY
-         if ( nLength := hb_socketRecv( oClient:hSocket, @cBuffer,4096, 0, 1000 ) ) > 0
+      BEGIN SEQUENCE
+         if ( nLength := HB_SocketRecv( oClient:hSocket, @cBuffer,4096, 0, 1000 ) ) > 0
             oClient:cBuffer = AllTrim( cBuffer )
           endif         
-      CATCH oError
+      RECOVER USING oError
          ::Debug( oError:Description )
          lMyExit := .t.
-      END 
+      ENDSEQUENCE
 
       if lMyExit
          EXIT
@@ -234,6 +239,8 @@ METHOD OnRead( oClient ) CLASS HB_Socket
       elseif nLength > 1         
          if ::bOnRead != NIL
             Eval( ::bOnRead, Self, oClient )
+         else 
+            HBSocket_CallBack_Onread( Self, oClient )
          endif
       endif
 
@@ -248,14 +255,14 @@ RETURN nil
 
 //-----------------------------------------//
 
-METHOD SendData( oClient, cSend ) CLASS HB_Socket
+METHOD SendData( oClient, cSend ) CLASS HBSocket
 
    local nLen 
 
    ::Debug( "SENDING...", cSend )
 
    DO WHILE Len( cSend ) > 0
-      IF ( nLen := hb_socketSend( oClient:hSocket, @cSend ) ) == - 1
+      IF ( nLen := HB_SocketSend( oClient:hSocket, @cSend ) ) == - 1
          EXIT
       ELSEIF nLen > 0
          cSend = SubStr( cSend, nLen + 1 )     
@@ -266,7 +273,7 @@ RETURN nLen
 
 //-----------------------------------------//
 //-----------------------------------------//
-CLASS HB_SocketClient
+CLASS HBSocketClient
 
    DATA hSocket
    DATA nID
@@ -284,7 +291,7 @@ ENDCLASS
 
 //-----------------------------------------//
 
-METHOD New( oSrv ) CLASS  HB_SocketClient
+METHOD New( oSrv ) CLASS  HBSocketClient
 
    ::oServer = oSrv
 
@@ -378,3 +385,35 @@ static function TStr( n )
 return AllTrim( Str( n ) )
 
 //---------------------------------------------------------------------------//
+
+#pragma BEGINDUMP
+#include "hbapi.h"
+
+void * pfnCallBack_OnRead;
+
+void set_callback_Onread( void * p )
+{
+	void * pfnCallBack_OnRead = p;   
+
+}
+
+HB_FUNC( SET_CALLBACK_ONREAD )
+{
+   set_callback_Onread( ( void * ) hb_parptr( 1 ) );   
+}
+
+HB_FUNC( HBSOCKET_CALLBACK_ONREAD )
+{
+   PHB_ITEM pServer = hb_param( 1, HB_IT_OBJECT );
+   PHB_ITEM pClient = hb_param( 2, HB_IT_OBJECT );
+   
+   if( pfnCallBack_OnRead )
+   {
+      void (*pfn)( PHB_ITEM, PHB_ITEM );
+  	  pfn = pfnCallBack_OnRead;
+  	  pfn( pServer, pClient );      	
+   }
+   
+}
+
+#pragma ENDDUMP

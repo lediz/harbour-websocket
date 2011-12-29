@@ -147,7 +147,7 @@ PROCEDURE SrvMain()
    BEGIN SEQUENCE
    
    oPP = __pp_Init( cInclude, "std.ch" )
-   oServer = HB_Socket():new( nPort )
+   oServer = HBSocket():new( nPort )
       if lBackground
 #ifdef  __PLATFORM__WINDOWS
          oServer:bOnProccess = {|| ! ( win_serviceGetStatus() == WIN_SERVICE_RUNNING ) }
