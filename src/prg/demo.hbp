@@ -1,0 +1,17 @@
+-es2
+-w1
+
+-mt
+-lhbwin{win}
+-inc
+
+-i..\..\include
+
+demo.prg
+hbsocket.prg
+wssocket.prg
+c_object.prg
+c_menu.prg
+c_say.prg
+c_window.prg
+msgs.prg
