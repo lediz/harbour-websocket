@@ -4,7 +4,7 @@
 -mt
 -lhbwin{win}
 -inc
--lxhb
+
 
 -i..\..\include
 
