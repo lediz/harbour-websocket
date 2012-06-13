@@ -714,6 +714,7 @@ RETURN hb_BitAnd( a, ( hb_BitShift( 1, 16 ) -1 ) ) ;
 #include <syslog.h>
 #include <string.h>
 #include <signal.h>
+PHB_ITEM pSelf;
 #endif //HB_OS_UNIX
 #include <hbapi.h>
 #include <hbvm.h>
