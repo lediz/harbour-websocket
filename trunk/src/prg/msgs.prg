@@ -1,3 +1,6 @@
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
 FUNCTION MsgAlert( cMsg )
    
    local cJSon

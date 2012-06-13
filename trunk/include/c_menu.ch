@@ -1,3 +1,6 @@
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
 #ifndef _C_MENU_CH
 #define _C_MENU_CH
 

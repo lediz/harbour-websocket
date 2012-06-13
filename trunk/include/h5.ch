@@ -1,3 +1,6 @@
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
 #ifndef _H5_CH
 #define _H5_CH
 

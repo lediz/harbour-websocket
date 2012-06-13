@@ -1,4 +1,6 @@
-//wssocket.prg
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
 
 #ifdef __PLATFORM__WINDOWS
 #include "hbwin.ch"
@@ -701,6 +703,7 @@ RETURN hb_BitAnd( a, ( hb_BitShift( 1, 16 ) -1 ) ) ;
 
 
 #pragma BEGINDUMP
+#if defined( HB_OS_UNIX )	
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -711,12 +714,13 @@ RETURN hb_BitAnd( a, ( hb_BitShift( 1, 16 ) -1 ) ) ;
 #include <syslog.h>
 #include <string.h>
 #include <signal.h>
+#endif //HB_OS_UNIX
 #include <hbapi.h>
 #include <hbvm.h>
 #include <hbapiitm.h>
 #include <hbapierr.h>
-static PHB_ITEM pSelf;
 
+#if defined( HB_OS_UNIX )	
 HB_FUNC( FORK )
 {
  hb_retnl( fork() );
@@ -806,7 +810,7 @@ HB_FUNC( TEST )
 {
   hb_retnl( LOG_WARNING );
 }
-
+#endif //HB_OS_UNIX
 
 HB_FUNC( STOA ){
 
@@ -826,7 +830,6 @@ HB_FUNC( STOA ){
       hb_errRT_BASE_SubstR( EG_ARG, 1108, NULL, HB_ERR_FUNCNAME, HB_ERR_ARGS_BASEPARAMS );
 
 }
-
 
 #pragma ENDDUMP
 
