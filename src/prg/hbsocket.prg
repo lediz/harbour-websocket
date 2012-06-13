@@ -1,3 +1,7 @@
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
+
 #include "hbclass.ch"
 #include "hbsocket.ch"
 #include "fileio.ch"
@@ -216,8 +220,7 @@ METHOD OnAccept() CLASS HBSocket
          if ::bOnAccept != NIL
             Eval( ::bOnAccept, Self, oClient )
          endif 
-         hb_ThreadStart( {| oClient | ::OnRead( oClient ), oClient:= NIL, hb_GCAll( .T. ) }, oClient ) 
-         
+         hb_ThreadStart( {| oClient | ::OnRead( oClient ), oClient:= NIL, hb_GCAll( .T. ) }, oClient )          
 //         hb_mutexNotify( Self:hMutexServer, pClientSocket )
                                   
       elseif ! ::lExit
@@ -291,9 +294,7 @@ METHOD OnRead( oClient ) CLASS HBSocket
 //      LogFile( ::cErrorLog, { "ERROR EN MUTEXSERVER" }  )
 //   endif
 
-   if ! oClient:lTimerOn
-      oClient:End()
-   endif
+   oClient:End()
    hb_threadJoin( oClient:pThread )
 
 //   ::KillClient( oClient )
@@ -697,3 +698,104 @@ static function TStr( n )
 return AllTrim( Str( n ) )
 
 //---------------------------------------------------------------------------//
+
+
+#pragma BEGINDUMP
+#if defined( HB_OS_WIN )	
+#include "hbapi.h"
+#include "hbwapi.h"
+#include "hbvm.h"
+#include "hbapiitm.h"
+
+void * pfnCallBack_OnRead;
+
+void set_callback_Onread( void * p )
+{
+	void * pfnCallBack_OnRead = p;   
+}
+
+HB_FUNC( SET_CALLBACK_ONREAD )
+{
+   set_callback_Onread( ( void * ) hb_parptr( 1 ) );   
+}
+
+HB_FUNC( HBSOCKET_CALLBACK_ONREAD )
+{
+   PHB_ITEM pServer = hb_param( 1, HB_IT_OBJECT );
+   PHB_ITEM pClient = hb_param( 2, HB_IT_OBJECT );
+   
+   if( pfnCallBack_OnRead )
+   {
+      void (*pfn)( PHB_ITEM, PHB_ITEM );
+  	  pfn = pfnCallBack_OnRead;
+  	  pfn( pServer, pClient );      	
+   }
+   
+}
+
+HB_FUNC( WIN_SERVICEINITIATE )
+{
+   HB_BOOL bRetVal = HB_FALSE;
+#if ! defined( HB_OS_WIN_CE )	
+	// open a handle to the SCM
+	SC_HANDLE schSCM = OpenSCManager( NULL, NULL, SC_MANAGER_ALL_ACCESS );
+
+	if( schSCM )
+	{
+      // open a handle to the service
+      void * hServiceName;
+      
+      SC_HANDLE schSrv = OpenService( schSCM, HB_PARSTRDEF( 1, &hServiceName, NULL ), GENERIC_EXECUTE );
+      if( schSrv )
+      {
+         if( ! ( bRetVal = StartService( schSrv, 0, NULL ) ) )
+            hbwapi_SetLastError( GetLastError() );
+            
+      }else 
+         hbwapi_SetLastError( GetLastError() );
+         
+      hb_strfree( hServiceName );
+      
+      CloseServiceHandle( schSrv );
+      CloseServiceHandle( schSCM );      
+               
+   }else
+      hbwapi_SetLastError( GetLastError() );
+      
+#endif	
+   hb_retl( bRetVal );
+}
+
+HB_FUNC( WIN_SERVICESTOPED )
+{
+   HB_BOOL bRetVal = HB_FALSE;
+#if ! defined( HB_OS_WIN_CE )	
+	// open a handle to the SCM
+	SC_HANDLE schSCM = OpenSCManager( NULL, NULL, SC_MANAGER_ALL_ACCESS );	
+	if( schSCM )
+	{
+	   void * hServiceName;
+	   // open a handle to the service
+	   SC_HANDLE schSrv = OpenService( schSCM, HB_PARSTRDEF( 1, &hServiceName, NULL ), GENERIC_EXECUTE );
+	   if( schSrv ){ 
+	      // send the STOP control request to the service
+	      SERVICE_STATUS status;
+	      ControlService( schSrv, SERVICE_CONTROL_STOP, &status );
+	      CloseServiceHandle( schSrv );
+	      CloseServiceHandle( schSCM );
+         
+         if( ( bRetVal = status.dwCurrentState != SERVICE_STOPPED ) )
+            hbwapi_SetLastError( GetLastError() );
+         
+         hb_strfree( hServiceName );
+         
+	   }else
+         hbwapi_SetLastError( GetLastError() );
+      
+   }else
+      hbwapi_SetLastError( GetLastError() );
+#endif  
+   hb_retl( bRetVal ); 
+}
+#endif
+#pragma ENDDUMP

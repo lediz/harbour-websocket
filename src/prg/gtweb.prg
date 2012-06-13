@@ -1,3 +1,6 @@
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
 //request HB_GT_WEB
 #include "hbclass.ch"
 #include "common.ch"

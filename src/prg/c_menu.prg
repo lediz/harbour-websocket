@@ -1,3 +1,7 @@
+/*
+(c)2012 Daniel Garcia-Gil <danielgarciagil@gmail.com>
+*/
+
 #include "h5.ch"
 
 static hMainMenu := {=>}
