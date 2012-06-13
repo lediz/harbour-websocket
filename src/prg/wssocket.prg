@@ -81,9 +81,9 @@ CLASS WebSocketServer FROM HBSocket
    METHOD OnClose( oClient )
    
    METHOD Activate()
-#ifdef __PLATFORM__LINUX
-   METHOD SignalHandler( nSignal )
-#endif   
+//#ifdef __PLATFORM__LINUX
+//   METHOD SignalHandler( nSignal )
+//#endif   
 
 
    METHOD StartControl( oClient )
@@ -94,11 +94,12 @@ ENDCLASS
 
 //-----------------------------------------//
 
-METHOD New( cPort, cMode, bOnInit ) CLASS WebSocketServer
+METHOD New( cPort, cMode, bOnInit, bOnStarted ) CLASS WebSocketServer
 
    LOCAL nError
    LOCAL cMsg
    LOCAL nProcess
+   LOCAL nFork
    
    oHost      = Self
    ::hMainWnd = hb_Hash()
@@ -108,6 +109,7 @@ METHOD New( cPort, cMode, bOnInit ) CLASS WebSocketServer
    ::lBackground = .T.
    
    ::bOnInit = bOnInit
+   ::bOnStarted = bOnStarted
    
    IF ! File( PORT_FILE ) .OR. ! Empty( cPort )
       DEFAULT cPort TO "2000"   
@@ -118,6 +120,7 @@ METHOD New( cPort, cMode, bOnInit ) CLASS WebSocketServer
    
 #ifdef __PLATFORM__LINUX
    DEFAULT cMode TO "start"
+   cMode = Upper( cMode )
    cls
    if cMode == "START"
      if File( PID_FILE )
@@ -144,20 +147,18 @@ METHOD New( cPort, cMode, bOnInit ) CLASS WebSocketServer
 
    IF ::lBackground
 
-   SetSignalsHandler( Self )
-
-   if Fork() > 0
-     return nil  // Parent process ends and child process continues
-   endif
-
-   umask( 0 ) // In order to write to any files (including logs) created by the daemon
-
-   SetSignalAlarm()
-
-   QOut(  "daemon starts" + CRLF )
-   ::Activate()
-   
+      SetSignalsHandler()
+      nFork = Fork()
+      if nFork  > 0
+        return nil  // Parent process ends and child process continues
+      endif
+      umask( 0 ) // In order to write to any files (including logs) created by the daemon
+      
+      SetSignalAlarm()
+      
+      QOut( "daemon starts" + CRLF )      
    ENDIF
+
    // Close standard files descriptors
    // CloseStandardFiles()
 #endif
@@ -232,7 +233,7 @@ METHOD New( cPort, cMode, bOnInit ) CLASS WebSocketServer
 
    ENDSWITCH
 #endif
-
+   ::Activate()
 RETURN Self
 
 //-----------------------------------------//
@@ -587,22 +588,37 @@ METHOD HybiEncode( cData, lBinary ) CLASS WebSocketServer
 RETURN cPacket    
 
 
-#ifdef __PLATFORM__LINUX
-METHOD SignalHandler( nSignal ) CLASS WebSocketServer
+//#ifdef __PLATFORM__LINUX
+//METHOD SignalHandler( nSignal ) CLASS WebSocketServer
+//
+//  DO CASE 
+//     CASE nSignal == SIGHUP
+//          QOut(  "Received SIGHUP signal" + CRLF  )
+//     CASE nSignal == SIGKILL .or. nSignal == SIGTERM
+//          QOut( "to exit..." + CRLF )
+//          ::lExit = .T. 
+//     OTHERWISE
+//          QOut(  "Unhandled SIGNAL " + AllTrim( Str( nSignal ) ) + CRLF )
+//  ENDCASE
+//
+//RETURN NIL
+//
+//#endif
 
-  DO CASE 
-     CASE nSignal == SIGHUP
-          QOut(  "Received SIGHUP signal" + CRLF  )
-     CASE nSignal == SIGKILL .or. nSignal == SIGTERM
-          QOut( "to exit..." + CRLF )
-          ::lExit = .T. 
-     OTHERWISE
-          QOut(  "Unhandled SIGNAL " + AllTrim( Str( nSignal ) ) + CRLF )
-  ENDCASE
+function SignalHandler( nSignal )
+  local cOut := ""
+  do case 
+     case nSignal == SIGHUP
+          cOut = "Received SIGHUP signal" + CRLF
+     case nSignal == SIGKILL .or. nSignal == SIGTERM
+          cOut = "Received SIGTERM signal" + CRLF
+          FErase( PID_FILE )
+     otherwise
+          cOut = "Unhandled SIGNAL " + AllTrim( Str( nSignal ) ) + CRLF 
+  endcase
 
-RETURN NIL
 
-#endif
+return nil
 
 //-----------------------------------------//
 
@@ -772,7 +788,7 @@ void CatchAlarm( int sig )
 void SignalHandler( int sig )
 {
   hb_vmPushSymbol( hb_dynsymGetSymbol( "SIGNALHANDLER" ) );
-  hb_vmPush( pSelf );
+  hb_vmPushNil();
   hb_vmPushLong( sig );
   hb_vmFunction( 1 );
 }
@@ -784,7 +800,6 @@ HB_FUNC( SETSIGNALALARM )
 
 HB_FUNC( SETSIGNALSHANDLER )
 {
-  pSelf = hb_param( 1, HB_IT_OBJECT );
   signal( SIGHUP, SignalHandler );
   signal( SIGTERM, SignalHandler );
   signal( SIGINT, SignalHandler );

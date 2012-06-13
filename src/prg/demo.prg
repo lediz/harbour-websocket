@@ -12,13 +12,15 @@ PROCEDURE Main( cPuerto, cMode )
    DEFAULT cPuerto TO "8090" 
    DEFAULT cMode   TO "NONE" 
    
-   DEFINE MAINAPP oWebSocket PORT cPuerto MODE cMode
+   oWebSocket = WebSocketServer():New( cPuerto, cMode, , {|| Comienza( ) } )
    
-   oWebSocket:bOnStarted    = {| oClient | Comienza( ) }
-   oWebSocket:bOnNewClient  = {| oClient | QOut( "Client Accepted!!!" ) }
-   oWebSocket:bOnCloseClient = {| oClient | QOut( "Client Closed!!!" ) }
+//   DEFINE MAINAPP oWebSocket PORT cPuerto MODE cMode
+//? cPuerto, ValType( oWebSocket ), oWebSocket, cMode
+//   oWebSocket:bOnStarted    = {| oClient | Comienza( ) }
+//   oWebSocket:bOnNewClient  = {| oClient | QOut( "Client Accepted!!!" ) }
+//   oWebSocket:bOnCloseClient = {| oClient | QOut( "Client Closed!!!" ) }
    
-   ACTIVATE MAINAPP oWebSocket
+//   ACTIVATE MAINAPP oWebSocket
 
 RETURN
 
