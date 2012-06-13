@@ -604,7 +604,7 @@ RETURN cPacket
 //RETURN NIL
 //
 //#endif
-
+#ifdef __PLATFORM__LINUX
 function SignalHandler( nSignal )
   local cOut := ""
   do case 
@@ -619,7 +619,7 @@ function SignalHandler( nSignal )
 
 
 return nil
-
+#endif
 //-----------------------------------------//
 
 STATIC FUNCTION doPing()
